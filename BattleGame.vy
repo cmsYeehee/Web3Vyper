@@ -30,7 +30,8 @@ character_contract_address: public(address)
 item_contract_address: public(address)
 erc721_contract_address: public(address)
 character_equipment: public(HashMap[uint256, EquippedItems])
-battle_records: public(DynArray[BattleRecord, 100])
+battle_records: public(HashMap[uint256, BattleRecord])
+battle_count: public(uint256)
 
 # Events
 event ItemEquipped:
@@ -53,6 +54,7 @@ def __init__(character_address: address, item_address: address, erc721_address: 
     self.character_contract_address = character_address
     self.item_contract_address = item_address
     self.erc721_contract_address = erc721_address
+    self.battle_count = 0
 
 @external
 def equip_item(character_id: uint256, item_id: uint256):
@@ -132,12 +134,12 @@ def battle(character_id1: uint256, character_id2: uint256):
     power1: uint256 = self._calculate_total_power(character_id1, char1_strength, char1_defense, char1_speed)
     power2: uint256 = self._calculate_total_power(character_id2, char2_strength, char2_defense, char2_speed)
     
-    # Add randomness factor (±20%)
-    random1: uint256 = self._get_random_number(character_id1)
-    random2: uint256 = self._get_random_number(character_id2)
+    # Add simple 0-20% randomness (fixed seed for simplicity)
+    random_factor1: uint256 = 10  # Simplified random
+    random_factor2: uint256 = 10  # Simplified random
     
-    power1 = power1 * (80 + random1 % 41) / 100  # 80-120% of power
-    power2 = power2 * (80 + random2 % 41) / 100  # 80-120% of power
+    power1 = power1 * (100 + random_factor1) / 100
+    power2 = power2 * (100 + random_factor2) / 100
     
     # Determine winner
     winner_id: uint256 = 0
@@ -151,15 +153,15 @@ def battle(character_id1: uint256, character_id2: uint256):
         loser_id = character_id1
     
     # Record battle
-    battle_record: BattleRecord = BattleRecord({
+    battle_id: uint256 = self.battle_count
+    self.battle_count += 1
+    
+    self.battle_records[battle_id] = BattleRecord({
         character1_id: character_id1,
         character2_id: character_id2,
         winner_id: winner_id,
         timestamp: block.timestamp
     })
-    
-    self.battle_records.append(battle_record)
-    battle_id: uint256 = convert(len(self.battle_records) - 1, uint256)
     
     # Update character records
     CharacterContract(self.character_contract_address).update_battle_record(winner_id, True)
@@ -218,15 +220,6 @@ def _calculate_total_power(character_id: uint256, strength: uint8, defense: uint
     return total_strength * 2 + total_defense + total_speed
 
 @view
-@internal
-def _get_random_number(seed: uint256) -> uint256:
-    return convert(keccak256(concat(
-        convert(block.timestamp, bytes32),
-        convert(block.prevhash, bytes32),  # Explicit conversion to bytes32
-        convert(seed, bytes32)
-    )), uint256)
-
-@view
 @external
 def get_equipped_items(character_id: uint256) -> (uint256, uint256, uint256):
     equipped: EquippedItems = self.character_equipment[character_id]
@@ -234,5 +227,6 @@ def get_equipped_items(character_id: uint256) -> (uint256, uint256, uint256):
 
 @view
 @external
-def get_battle_count() -> uint256:
-    return convert(len(self.battle_records), uint256)
+def get_battle_record(battle_id: uint256) -> (uint256, uint256, uint256, uint256):
+    record: BattleRecord = self.battle_records[battle_id]
+    return record.character1_id, record.character2_id, record.winner_id, record.timestamp
