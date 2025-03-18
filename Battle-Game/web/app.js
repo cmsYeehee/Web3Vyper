@@ -91,6 +91,13 @@ const characterABI = [
         "outputs": [],
         "stateMutability": "nonpayable",
         "type": "function"
+    },
+    {
+        "inputs": [{"internalType": "uint256", "name": "token_id", "type": "uint256"}],
+        "name": "level_up",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
     }
 ];
 
@@ -305,6 +312,7 @@ async function init() {
             await loadCharacters();
             await loadItems();
             await loadBattleHistory();
+            await loadAvailableOpponents(); // New: load opponents
             
             // Set up event listeners for MetaMask
             window.ethereum.on('accountsChanged', handleAccountsChanged);
@@ -381,6 +389,7 @@ function handleAccountsChanged(newAccounts) {
         updateWalletInfo();
         loadCharacters();
         loadItems();
+        loadAvailableOpponents(); // New: reload opponents when account changes
     }
 }
 
@@ -463,6 +472,9 @@ async function loadCharacters() {
                 const xpRequired = character[5] * 100;
                 const xpPercentage = xpRequired > 0 ? (character[6] / xpRequired) * 100 : 0;
                 
+                // Check if character can level up (has enough XP)
+                const canLevelUp = character[6] >= xpRequired;
+                
                 charactersHTML += `
                     <div class="character-card ${className.toLowerCase()}" data-id="${characterId}">
                         <h3>${character[0]}</h3>
@@ -495,12 +507,13 @@ async function loadCharacters() {
                             <div class="status-bar xp-bar" title="XP: ${character[6]}/${xpRequired}">
                                 <div class="status-fill" style="width: ${xpPercentage}%"></div>
                             </div>
-                            <p>XP: ${character[6]}/${xpRequired}</p>
+                            <p>XP: ${character[6]}/${xpRequired} ${canLevelUp ? '✓' : ''}</p>
                         </div>
                         <div class="character-actions">
                             <button class="select-character-btn btn-secondary">Select for Battle</button>
                             <button class="toggle-availability-btn ${character[9] ? 'btn-danger' : 'btn-success'}">${character[9] ? 'Set Unavailable' : 'Set Available'}</button>
                             <button class="equip-items-btn btn-secondary">Equip Items</button>
+                            ${canLevelUp ? '<button class="level-up-btn btn-warning">Level Up!</button>' : ''}
                         </div>
                     </div>
                 `;
@@ -526,10 +539,54 @@ async function loadCharacters() {
             document.querySelectorAll('.equip-items-btn').forEach(btn => {
                 btn.addEventListener('click', openEquipItemsModal);
             });
+            
+            // Add listener for the new level up button
+            document.querySelectorAll('.level-up-btn').forEach(btn => {
+                btn.addEventListener('click', levelUpCharacter);
+            });
         }
     } catch (error) {
         console.error("Error loading characters:", error);
         characterListElem.innerHTML = '<p class="placeholder-message">Error loading characters. Please try again.</p>';
+    }
+}
+
+// NEW: Level up character function
+async function levelUpCharacter(event) {
+    const characterCard = event.target.closest('.character-card');
+    const characterId = characterCard.dataset.id;
+    
+    try {
+        showLoadingModal("Leveling up character...");
+        
+        // Call the contract's level_up method
+        await characterContract.methods.level_up(characterId).send({ from: accounts[0] });
+        
+        hideLoadingModal();
+        
+        // Show success message
+        const resultContent = document.getElementById('battle-result-content');
+        document.getElementById('battle-result-title').textContent = "Level Up";
+        
+        resultContent.innerHTML = `
+            <div class="battle-result">
+                <h3>Level Up Successful!</h3>
+                <p>Your character has grown stronger.</p>
+                <p>Strength +1</p>
+                <p>Defense +1</p>
+                <p>Speed +1</p>
+            </div>
+        `;
+        
+        document.getElementById('battle-result-modal').style.display = 'block';
+        
+        // Reload character data
+        await loadCharacters();
+        
+    } catch (error) {
+        console.error("Error leveling up character:", error);
+        hideLoadingModal();
+        alert("Failed to level up character. Please try again.");
     }
 }
 
@@ -735,22 +792,129 @@ function selectCharacterForBattle(event) {
     updateBattleButton();
 }
 
-// Select an opponent for battle
-async function selectOpponent(event) {
+// NEW: Load available opponents for battle
+async function loadAvailableOpponents() {
+    const characterListElem = document.getElementById('opponent-list');
+    if (!characterListElem) {
+        console.error("Opponent list container not found");
+        return;
+    }
+    
+    showLoadingIndicator('opponent-list', "Loading available opponents...");
+    
+    try {
+        // Get character count
+        let characterCount = 0;
+        try {
+            characterCount = await characterContract.methods.get_character_count().call();
+        } catch (e) {
+            console.warn("Error getting character count:", e);
+            characterCount = 10; // Try the first 10 character IDs as fallback
+        }
+        
+        let opponentsHTML = '';
+        let availableOpponents = 0;
+        
+        for (let i = 0; i < characterCount; i++) {
+            try {
+                // Get character ID
+                let characterId;
+                try {
+                    characterId = await characterContract.methods.get_character_at_index(i).call();
+                } catch (e) {
+                    characterId = i + 1; // Fallback to index + 1
+                }
+                
+                // Get character details
+                const character = await characterContract.methods.get_character_details(characterId).call();
+                
+                // Skip if character is not available for battle
+                if (!character[9]) continue;
+                
+                // Skip if this character belongs to the current user
+                const owner = character[10] || await characterContract.methods.get_character_owner(characterId).call();
+                if (owner.toLowerCase() === accounts[0].toLowerCase()) {
+                    continue;
+                }
+                
+                availableOpponents++;
+                
+                const className = await characterContract.methods.get_character_class_name(character[1]).call();
+                const classIcon = getClassIcon(character[1]);
+                
+                opponentsHTML += `
+                    <div class="character-card opponent ${className.toLowerCase()}" data-id="${characterId}">
+                        <div class="opponent-badge">OPPONENT</div>
+                        <h3>${character[0]}</h3>
+                        <div class="character-image ${className.toLowerCase()}">${classIcon}</div>
+                        <div class="character-stats">
+                            <div class="stat-row">
+                                <span class="stat-label">Class:</span>
+                                <span>${className}</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-label">Level:</span>
+                                <span>${character[5]}</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-label">STR:</span>
+                                <span>${character[2]}</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-label">DEF:</span>
+                                <span>${character[3]}</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-label">SPD:</span>
+                                <span>${character[4]}</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-label">W/L:</span>
+                                <span>${character[7]}/${character[8]}</span>
+                            </div>
+                        </div>
+                        <div class="character-actions">
+                            <button class="select-opponent-btn btn-danger">Battle This Opponent</button>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error(`Error loading opponent at index ${i}:`, error);
+            }
+        }
+        
+        if (opponentsHTML === '') {
+            characterListElem.innerHTML = '<p class="placeholder-message">No opponents are currently available for battle. Check back later!</p>';
+        } else {
+            characterListElem.innerHTML = opponentsHTML;
+            
+            // Add event listeners to opponent buttons
+            document.querySelectorAll('.select-opponent-btn').forEach(btn => {
+                btn.addEventListener('click', selectOpponentForBattle);
+            });
+        }
+    } catch (error) {
+        console.error("Error loading opponents:", error);
+        characterListElem.innerHTML = '<p class="placeholder-message">Error loading opponents. Please try again.</p>';
+    }
+}
+
+// NEW: Modified function to select an opponent for battle
+function selectOpponentForBattle(event) {
     const characterCard = event.target.closest('.character-card');
     const characterId = characterCard.dataset.id;
     
     if (selectedOpponentId === characterId) {
         // Deselect
         selectedOpponentId = null;
-        document.querySelectorAll('.character-card').forEach(card => {
+        document.querySelectorAll('.character-card.opponent').forEach(card => {
             card.classList.remove('selected-opponent');
         });
         document.getElementById('opponent-character').innerHTML = '<h3>Opponent</h3><p>Select an opponent to battle</p>';
     } else {
         // Select
         selectedOpponentId = characterId;
-        document.querySelectorAll('.character-card').forEach(card => {
+        document.querySelectorAll('.character-card.opponent').forEach(card => {
             card.classList.remove('selected-opponent');
         });
         characterCard.classList.add('selected-opponent');
@@ -767,16 +931,16 @@ async function selectOpponent(event) {
     }
     
     updateBattleButton();
- }
- 
- // Update the battle button state
- function updateBattleButton() {
+}
+
+// Update the battle button state
+function updateBattleButton() {
     const battleButton = document.getElementById('start-battle');
     battleButton.disabled = !(selectedCharacterId && selectedOpponentId);
- }
- 
- // Toggle character availability for battle
- async function toggleCharacterAvailability(event) {
+}
+
+// Toggle character availability for battle
+async function toggleCharacterAvailability(event) {
     const characterCard = event.target.closest('.character-card');
     const characterId = characterCard.dataset.id;
     
@@ -787,6 +951,7 @@ async function selectOpponent(event) {
         
         // Reload characters to reflect the change
         await loadCharacters();
+        await loadAvailableOpponents(); // New: reload the opponents list as well
         
         hideLoadingModal();
     } catch (error) {
@@ -794,10 +959,10 @@ async function selectOpponent(event) {
         hideLoadingModal();
         alert("Failed to toggle character availability. Please try again.");
     }
- }
- 
- // Create a new character
- async function createCharacter(event) {
+}
+
+// Create a new character
+async function createCharacter(event) {
     event.preventDefault();
     
     const name = document.getElementById('character-name').value;
@@ -817,19 +982,25 @@ async function selectOpponent(event) {
         hideLoadingModal();
         alert("Failed to create character. Please try again.");
     }
- }
- 
- // Create a new item
- async function createItem(event) {
+}
+
+// Create a new item
+async function createItem(event) {
     event.preventDefault();
     
     const name = document.getElementById('item-name').value;
     const itemType = document.getElementById('item-type').value;
+    const rarity = document.getElementById('item-rarity').value;
     
     try {
         showLoadingModal("Creating item...");
         
-        await itemContract.methods.create_item(name, itemType).send({ from: accounts[0] });
+        // Check if rarity is included in the API
+        if (itemContract.methods.create_item.arguments.length > 2) {
+            await itemContract.methods.create_item(name, itemType, rarity).send({ from: accounts[0] });
+        } else {
+            await itemContract.methods.create_item(name, itemType).send({ from: accounts[0] });
+        }
         
         hideLoadingModal();
         alert("Item created successfully!");
@@ -840,10 +1011,10 @@ async function selectOpponent(event) {
         hideLoadingModal();
         alert("Failed to create item. Please try again.");
     }
- }
- 
- // Improved openEquipItemsModal function
- async function openEquipItemsModal(event) {
+}
+
+// Improved openEquipItemsModal function
+async function openEquipItemsModal(event) {
     const characterCard = event.target.closest('.character-card');
     const characterId = characterCard.dataset.id;
     
@@ -1001,10 +1172,10 @@ async function selectOpponent(event) {
         hideLoadingModal();
         alert("Failed to load equipment information. Please try again. Error: " + error.message);
     }
- }
- 
- // Save equipment choices
- async function saveEquipment() {
+}
+
+// Save equipment choices
+async function saveEquipment() {
     const characterId = document.getElementById('equipped-character-id').value;
     const weaponId = document.getElementById('weapon-select').value;
     const armorId = document.getElementById('armor-select').value;
@@ -1038,10 +1209,10 @@ async function selectOpponent(event) {
         document.getElementById('save-equipment').textContent = 'Save Equipment';
         alert("Failed to save equipment. Please try again.");
     }
- }
- 
- // Initiate a battle
- async function startBattle() {
+}
+
+// Initiate a battle
+async function startBattle() {
     if (!selectedCharacterId || !selectedOpponentId) {
         alert("Please select both your character and an opponent.");
         return;
@@ -1097,14 +1268,15 @@ async function selectOpponent(event) {
         // Reload data
         await loadCharacters();
         await loadBattleHistory();
+        await loadAvailableOpponents(); // Reload opponents in case any changed availability
     } catch (error) {
         console.error("Error initiating battle:", error);
         hideLoadingModal();
         alert("Failed to initiate battle. Please try again.");
     }
- }
- 
- // Function to train against an NPC
+}
+
+// Function to train against an NPC
 async function trainAgainstNPC(event) {
     if (!selectedCharacterId) {
         alert("Please select your character first before training.");
@@ -1203,35 +1375,35 @@ async function trainAgainstNPC(event) {
         alert("Training failed. Please try again. Error: " + error.message);
     }
 }
- 
- // Open create character modal
- function openCreateCharacterModal() {
+
+// Open create character modal
+function openCreateCharacterModal() {
     const modal = document.getElementById('create-character-modal');
     modal.style.display = 'block';
- }
- 
- // Open create item modal
- function openCreateItemModal() {
+}
+
+// Open create item modal
+function openCreateItemModal() {
     const modal = document.getElementById('create-item-modal');
     modal.style.display = 'block';
- }
- 
- // Close all modals
- function closeModals() {
+}
+
+// Close all modals
+function closeModals() {
     document.querySelectorAll('.modal').forEach(modal => {
         modal.style.display = 'none';
     });
- }
- 
- // Add event listeners for NPC training
- function setupNPCTrainingListeners() {
+}
+
+// Add event listeners for NPC training
+function setupNPCTrainingListeners() {
     document.querySelectorAll('.train-against-npc').forEach(button => {
         button.addEventListener('click', trainAgainstNPC);
     });
- }
- 
- // Set up event listeners
- function setupEventListeners() {
+}
+
+// Set up event listeners
+function setupEventListeners() {
     // Connect wallet button
     const connectWalletBtn = document.getElementById('connect-wallet');
     if (connectWalletBtn) {
@@ -1285,6 +1457,12 @@ async function trainAgainstNPC(event) {
         closeBattleResultBtn.addEventListener('click', closeModals);
     }
     
+    // Refresh opponents button
+    const refreshOpponentsBtn = document.getElementById('refresh-opponents');
+    if (refreshOpponentsBtn) {
+        refreshOpponentsBtn.addEventListener('click', loadAvailableOpponents);
+    }
+    
     // NPC training listeners
     setupNPCTrainingListeners();
     
@@ -1296,4 +1474,4 @@ async function trainAgainstNPC(event) {
             }
         });
     });
- }
+}

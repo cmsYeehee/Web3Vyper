@@ -130,6 +130,24 @@ button:disabled {
     background: linear-gradient(90deg, #ee0979 0%, #ff6a00 100%);
 }
 
+/* Level Up Button */
+.btn-warning {
+    background: linear-gradient(90deg, #f7b733 0%, #fc4a1a 100%);
+}
+
+.level-up-btn {
+    width: 100%;
+    margin-top: 0.5rem;
+    font-weight: bold;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); box-shadow: 0 0 10px rgba(255, 255, 0, 0.7); }
+    100% { transform: scale(1); }
+}
+
 .placeholder-message {
     text-align: center;
     padding: 2rem;
@@ -390,6 +408,58 @@ input, select {
     width: 100%;
 }
 
+/* Opponent cards styling */
+.character-card.opponent {
+    background: linear-gradient(135deg, #4e4376 0%, #2b5876 100%);
+    border-left: 5px solid #e74c3c;
+    position: relative;
+}
+
+.opponent-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background-color: rgba(231, 76, 60, 0.8);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.select-opponent-btn {
+    width: 100%;
+    background: linear-gradient(90deg, #e74c3c 0%, #c0392b 100%);
+}
+
+/* Refresh Opponents button */
+.refresh-opponents-btn {
+    background: linear-gradient(90deg, #2980b9 0%, #3498db 100%);
+    margin-left: auto;
+}
+
+/* Section titles with buttons */
+.section-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.section-header h3 {
+    margin: 0;
+}
+
+/* Battle section reorganization */
+#opponent-list {
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+}
+
+/* Loading indicator for opponent list */
+#opponent-list .placeholder-message {
+    width: 100%;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
     .battle-arena {
@@ -526,8 +596,4 @@ input, select {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 1rem;
-}
-
-.section-header h2 {
-    margin: 0;
 }

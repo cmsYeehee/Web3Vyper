@@ -27,6 +27,17 @@
         <div class="section">
             <h2>Battle Arena</h2>
             <p>Select your character and an opponent to battle!</p>
+            
+            <!-- Opponents List section -->
+            <div class="section-header">
+                <h3>Available Opponents</h3>
+                <button id="refresh-opponents" class="refresh-opponents-btn">Refresh Opponents</button>
+            </div>
+            <div id="opponent-list" class="card-container">
+                <!-- Opponent cards will be dynamically inserted here -->
+                <p class="placeholder-message">Loading available opponents...</p>
+            </div>
+            
             <div class="battle-arena">
                 <div class="battle-character" id="your-character">
                     <h3>Your Character</h3>
