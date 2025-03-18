@@ -1,3 +1,37 @@
+// Initialize Firebase
+const firebaseConfig = {
+    apiKey: "AIzaSyCCmE8IkF1SR_-FUySymGqaLa2MSp8-0EA",
+    authDomain: "vyperwebapp.firebaseapp.com",
+    projectId: "vyperwebapp",
+    storageBucket: "vyperwebapp.firebasestorage.app",
+    messagingSenderId: "713529305807",
+    appId: "1:713529305807:web:51975152f640bac24be5ba",
+    measurementId: "G-532GMLFPMB"
+  };
+  
+  // Load Firebase scripts dynamically
+  document.addEventListener('DOMContentLoaded', function() {
+    // Load Firebase scripts
+    const firebaseAppScript = document.createElement('script');
+    firebaseAppScript.src = 'https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js';
+    document.head.appendChild(firebaseAppScript);
+  
+    const firebaseAnalyticsScript = document.createElement('script');
+    firebaseAnalyticsScript.src = 'https://www.gstatic.com/firebasejs/9.6.10/firebase-analytics.js';
+    document.head.appendChild(firebaseAnalyticsScript);
+  
+    // Initialize Firebase after scripts are loaded
+    firebaseAppScript.onload = function() {
+      firebaseAnalyticsScript.onload = function() {
+        const app = firebase.initializeApp(firebaseConfig);
+        const analytics = firebase.analytics();
+        
+        // The rest of your initialization code can go here
+        init();
+      };
+    };
+  });
+
 // Contract ABIs - These will need to be updated with your actual contract ABIs
 const characterABI = [
     // Example ABI entries - replace with your actual ABI
