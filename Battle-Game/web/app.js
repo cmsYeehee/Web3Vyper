@@ -318,6 +318,9 @@ async function init() {
             window.ethereum.on('accountsChanged', handleAccountsChanged);
             window.ethereum.on('chainChanged', () => window.location.reload());
             
+            // Debug contract methods
+            logContractMethods();
+            
             console.log("Web3 initialized successfully");
         } catch (error) {
             console.error("Error initializing Web3:", error);
@@ -326,6 +329,32 @@ async function init() {
     } else {
         console.error("MetaMask not detected");
         alert("Please install MetaMask to use this application");
+    }
+}
+
+// Debug contract methods
+function logContractMethods() {
+    console.log("CharacterContract methods:", Object.keys(characterContract.methods).filter(key => !key.includes('(')));
+    console.log("ItemContract methods:", Object.keys(itemContract.methods).filter(key => !key.includes('(')));
+    console.log("BattleGameContract methods:", Object.keys(battleGameContract.methods).filter(key => !key.includes('(')));
+    
+    // Check create_item method specifically
+    if (itemContract.methods.create_item) {
+        console.log("create_item method details:");
+        try {
+            const jsonInterface = itemContract._jsonInterface.find(method => method.name === 'create_item');
+            console.log(jsonInterface);
+        } catch (error) {
+            console.error("Could not find method details:", error);
+        }
+    } else {
+        console.warn("create_item method not found directly in contract methods");
+        
+        // Look for similar methods
+        const potentialMethods = Object.keys(itemContract.methods).filter(key => 
+            key.toLowerCase().includes('create') || key.toLowerCase().includes('item')
+        );
+        console.log("Potential item creation methods:", potentialMethods);
     }
 }
 
@@ -984,32 +1013,121 @@ async function createCharacter(event) {
     }
 }
 
-// Create a new item
+// Wrapper function that will try multiple approaches to create an item
+async function tryCreateItem(name, itemType, rarity) {
+    const statusDiv = document.getElementById('item-creation-status');
+    statusDiv.className = 'status-message';
+    statusDiv.textContent = "Attempting to create item...";
+    
+    // Try different approaches in sequence
+    try {
+        // Approach 1: Using typical create_item with 3 params (name, type, rarity)
+        statusDiv.textContent = "Trying standard method with rarity...";
+        await itemContract.methods.create_item(name, parseInt(itemType), parseInt(rarity)).send({ 
+            from: accounts[0],
+            gas: 500000 // Fixed higher gas limit
+        });
+        return true;
+    } catch (error1) {
+        console.log("First approach failed:", error1.message);
+        
+        try {
+            // Approach 2: Using create_item with 2 params (name, type)
+            statusDiv.textContent = "Trying without rarity parameter...";
+            await itemContract.methods.create_item(name, parseInt(itemType)).send({ 
+                from: accounts[0],
+                gas: 500000
+            });
+            return true;
+        } catch (error2) {
+            console.log("Second approach failed:", error2.message);
+            
+            try {
+                // Approach 3: Look for alternate naming (createItem vs create_item)
+                if (itemContract.methods.createItem) {
+                    statusDiv.textContent = "Trying alternate method name...";
+                    await itemContract.methods.createItem(name, parseInt(itemType), parseInt(rarity)).send({ 
+                        from: accounts[0],
+                        gas: 500000
+                    });
+                    return true;
+                }
+            } catch (error3) {
+                console.log("Third approach failed:", error3.message);
+                
+                try {
+                    // Approach 4: Try with strings instead of integers
+                    statusDiv.textContent = "Trying with string parameters...";
+                    await itemContract.methods.create_item(name, itemType, rarity).send({ 
+                        from: accounts[0],
+                        gas: 500000
+                    });
+                    return true;
+                } catch (error4) {
+                    console.log("Fourth approach failed:", error4.message);
+                    
+                    // All approaches failed
+                    throw new Error("All item creation approaches failed. Check contract compatibility.");
+                }
+            }
+        }
+    }
+}
+
+// NEW: Improved createItem function with multiple approaches
 async function createItem(event) {
     event.preventDefault();
     
+    const submitButton = document.getElementById('create-item-submit');
+    const statusDiv = document.getElementById('item-creation-status');
     const name = document.getElementById('item-name').value;
     const itemType = document.getElementById('item-type').value;
     const rarity = document.getElementById('item-rarity').value;
     
+    // Validate inputs
+    if (!name || name.trim() === '') {
+        statusDiv.className = 'status-message error';
+        statusDiv.textContent = "Please enter an item name";
+        return;
+    }
+    
     try {
         showLoadingModal("Creating item...");
+        submitButton.disabled = true;
+        submitButton.textContent = "Creating...";
         
-        // Check if rarity is included in the API
-        if (itemContract.methods.create_item.arguments.length > 2) {
-            await itemContract.methods.create_item(name, itemType, rarity).send({ from: accounts[0] });
-        } else {
-            await itemContract.methods.create_item(name, itemType).send({ from: accounts[0] });
-        }
+        // Log for debugging
+        console.log("Creating item with parameters:", {
+            name: name,
+            itemType: itemType,
+            rarity: rarity
+        });
+        
+        // Try to create the item with multiple approaches
+        await tryCreateItem(name, itemType, rarity);
         
         hideLoadingModal();
-        alert("Item created successfully!");
-        closeModals();
-        await loadItems();
+        submitButton.disabled = false;
+        submitButton.textContent = "Create Item";
+        
+        statusDiv.className = 'status-message success';
+        statusDiv.textContent = "Item created successfully!";
+        
+        // Reload items after short delay
+        setTimeout(async () => {
+            closeModals();
+            await loadItems();
+            statusDiv.className = 'status-message';
+            statusDiv.textContent = "";
+        }, 2000);
     } catch (error) {
         console.error("Error creating item:", error);
         hideLoadingModal();
-        alert("Failed to create item. Please try again.");
+        submitButton.disabled = false;
+        submitButton.textContent = "Create Item";
+        
+        statusDiv.className = 'status-message error';
+        statusDiv.textContent = "Failed to create item: " + error.message;
     }
 }
 
@@ -1275,7 +1393,6 @@ async function startBattle() {
         alert("Failed to initiate battle. Please try again.");
     }
 }
-
 // Function to train against an NPC
 async function trainAgainstNPC(event) {
     if (!selectedCharacterId) {
@@ -1386,6 +1503,13 @@ function openCreateCharacterModal() {
 function openCreateItemModal() {
     const modal = document.getElementById('create-item-modal');
     modal.style.display = 'block';
+    
+    // Reset the status message
+    const statusDiv = document.getElementById('item-creation-status');
+    if (statusDiv) {
+        statusDiv.className = 'status-message';
+        statusDiv.textContent = '';
+    }
 }
 
 // Close all modals
