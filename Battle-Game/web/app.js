@@ -32,6 +32,7 @@ const firebaseConfig = {
     };
   });
 
+  
 // Contract ABIs - These will need to be updated with your actual contract ABIs
 const characterABI = [
     // Example ABI entries - replace with your actual ABI
@@ -57,10 +58,10 @@ const battleGameABI = [
 ];
 
 // Contract addresses - Update these with your deployed contract addresses
-const characterContractAddress = "YOUR_CHARACTER_CONTRACT_ADDRESS";
-const itemContractAddress = "YOUR_ITEM_CONTRACT_ADDRESS";
-const battleGameContractAddress = "YOUR_BATTLE_GAME_CONTRACT_ADDRESS";
-const erc721ContractAddress = "YOUR_ERC721_CONTRACT_ADDRESS";
+const characterContractAddress = "0xD7ACd2a9FD159E69Bb102A1ca21C9a3e3A5F771B";
+const itemContractAddress = "0xf8e81D47203A594245E36C48e151709F0C19fBe8";
+const battleGameContractAddress = "0x7EF2e0048f5bAeDe046f6BF797943daF4ED8CB47";
+const erc721ContractAddress = "0xd8b934580fcE35a11B58C6D73aDeE468a2833fa8";
 
 // Global variables
 let web3;
