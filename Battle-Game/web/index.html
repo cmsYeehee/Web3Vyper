@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blockchain Battle Arena</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <h1>Blockchain Battle Arena</h1>
+        <div id="wallet-info">
+            <span id="wallet-address">Not connected</span>
+            <button id="connect-wallet">Connect Wallet</button>
+        </div>
+    </header>
+    
+    <div class="container">
+        <div class="section">
+            <h2>My Characters</h2>
+            <button id="create-character-btn" class="btn-success">Create New Character</button>
+            <div id="character-list" class="card-container">
+                <!-- Character cards will be dynamically inserted here -->
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>Battle Arena</h2>
+            <p>Select your character and an opponent to battle!</p>
+            <div class="battle-arena">
+                <div class="battle-character" id="your-character">
+                    <h3>Your Character</h3>
+                    <p>Select a character from your collection</p>
+                </div>
+                <div class="battle-vs">VS</div>
+                <div class="battle-character" id="opponent-character">
+                    <h3>Opponent</h3>
+                    <p>Select an opponent to battle</p>
+                </div>
+            </div>
+            <div style="text-align: center; margin-top: 1rem;">
+                <button id="start-battle" class="btn-danger" disabled>Start Battle</button>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>My Items</h2>
+            <div id="item-list" class="card-container">
+                <!-- Item cards will be dynamically inserted here -->
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>Battle History</h2>
+            <div id="battle-history" class="card-container">
+                <!-- Battle history will be dynamically inserted here -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- Create Character Modal -->
+    <div id="create-character-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Create New Character</h2>
+            <form id="create-character-form">
+                <div class="form-group">
+                    <label for="character-name">Character Name:</label>
+                    <input type="text" id="character-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="character-class">Character Class:</label>
+                    <select id="character-class" required>
+                        <option value="0">Warrior</option>
+                        <option value="1">Paladin</option>
+                        <option value="2">Rogue</option>
+                        <option value="3">Mage</option>
+                        <option value="4">Ranger</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn-success">Create Character</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Equip Items Modal -->
+    <div id="equip-items-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Equip Items</h2>
+            <div id="equipment-character-info"></div>
+            <div class="equipment-slots">
+                <div class="equipment-slot">
+                    <h3>Weapon</h3>
+                    <div id="weapon-slot" class="slot"></div>
+                    <select id="weapon-select">
+                        <option value="0">None</option>
+                    </select>
+                </div>
+                <div class="equipment-slot">
+                    <h3>Armor</h3>
+                    <div id="armor-slot" class="slot"></div>
+                    <select id="armor-select">
+                        <option value="0">None</option>
+                    </select>
+                </div>
+                <div class="equipment-slot">
+                    <h3>Accessory</h3>
+                    <div id="accessory-slot" class="slot"></div>
+                    <select id="accessory-select">
+                        <option value="0">None</option>
+                    </select>
+                </div>
+            </div>
+            <button id="save-equipment" class="btn-success">Save Equipment</button>
+        </div>
+    </div>
+    
+    <!-- Battle Result Modal -->
+    <div id="battle-result-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 id="battle-result-title">Battle Result</h2>
+            <div id="battle-result-content"></div>
+            <button id="close-battle-result" class="btn-success">Close</button>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.6.0/dist/web3.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
