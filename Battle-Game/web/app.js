@@ -139,9 +139,9 @@ const battleGameABI = [
 ];
 
 // IMPORTANT: REPLACE THESE WITH YOUR ACTUAL DEPLOYED CONTRACT ADDRESSES
-const characterContractAddress = "0x0000000000000000000000000000000000000000";  // Replace with actual Character Contract address
-const itemContractAddress = "0x0000000000000000000000000000000000000000";      // Replace with actual Item Contract address
-const battleGameContractAddress = "0x0000000000000000000000000000000000000000";  // Replace with actual Battle Game Contract address
+const characterContractAddress = "0x982071a15D38f9Cb368Ff5c128a53C400d941DA9";  // Replace with actual Character Contract address
+const itemContractAddress = "0xeC8996756C374a4fd48b5c06fd2775b0b87Be1dB";      // Replace with actual Item Contract address
+const battleGameContractAddress = "0x3467fCc493968F00adb251a2FB362f4b723B4dB5";  // Replace with actual Battle Game Contract address
 
 // Global variables
 let web3;
