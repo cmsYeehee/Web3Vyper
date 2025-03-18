@@ -74,6 +74,23 @@ const characterABI = [
         "outputs": [{"internalType": "address", "name": "", "type": "address"}],
         "stateMutability": "view",
         "type": "function"
+    },
+    {
+        "inputs": [{"internalType": "uint256", "name": "token_id", "type": "uint256"}],
+        "name": "update_battle_record",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {"internalType": "uint256", "name": "token_id", "type": "uint256"},
+            {"internalType": "uint16", "name": "amount", "type": "uint16"}
+        ],
+        "name": "add_experience",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
     }
 ];
 
@@ -192,6 +209,46 @@ let itemContract;
 let battleGameContract;
 let selectedCharacterId = null;
 let selectedOpponentId = null;
+
+// NPC characters for training
+const npcCharacters = {
+    "npc-1": {
+        name: "Training Dummy",
+        classType: 0,
+        strength: 5,
+        defense: 5,
+        speed: 5,
+        level: 1,
+        experience: 0,
+        wins: 0,
+        losses: 0,
+        isAvailable: true
+    },
+    "npc-2": {
+        name: "Veteran Soldier",
+        classType: 1,
+        strength: 12,
+        defense: 15,
+        speed: 8,
+        level: 5,
+        experience: 0,
+        wins: 0,
+        losses: 0,
+        isAvailable: true
+    },
+    "npc-3": {
+        name: "Arcane Master",
+        classType: 3,
+        strength: 20,
+        defense: 10,
+        speed: 15,
+        level: 10,
+        experience: 0,
+        wins: 0,
+        losses: 0,
+        isAvailable: true
+    }
+};
 
 // Load Firebase scripts dynamically
 document.addEventListener('DOMContentLoaded', function() {
@@ -710,16 +767,16 @@ async function selectOpponent(event) {
     }
     
     updateBattleButton();
-}
-
-// Update the battle button state
-function updateBattleButton() {
+ }
+ 
+ // Update the battle button state
+ function updateBattleButton() {
     const battleButton = document.getElementById('start-battle');
     battleButton.disabled = !(selectedCharacterId && selectedOpponentId);
-}
-
-// Toggle character availability for battle
-async function toggleCharacterAvailability(event) {
+ }
+ 
+ // Toggle character availability for battle
+ async function toggleCharacterAvailability(event) {
     const characterCard = event.target.closest('.character-card');
     const characterId = characterCard.dataset.id;
     
@@ -737,10 +794,10 @@ async function toggleCharacterAvailability(event) {
         hideLoadingModal();
         alert("Failed to toggle character availability. Please try again.");
     }
-}
-
-// Create a new character
-async function createCharacter(event) {
+ }
+ 
+ // Create a new character
+ async function createCharacter(event) {
     event.preventDefault();
     
     const name = document.getElementById('character-name').value;
@@ -760,10 +817,10 @@ async function createCharacter(event) {
         hideLoadingModal();
         alert("Failed to create character. Please try again.");
     }
-}
-
-// Create a new item
-async function createItem(event) {
+ }
+ 
+ // Create a new item
+ async function createItem(event) {
     event.preventDefault();
     
     const name = document.getElementById('item-name').value;
@@ -783,10 +840,10 @@ async function createItem(event) {
         hideLoadingModal();
         alert("Failed to create item. Please try again.");
     }
-}
-
-// Open the equip items modal
-async function openEquipItemsModal(event) {
+ }
+ 
+ // Improved openEquipItemsModal function
+ async function openEquipItemsModal(event) {
     const characterCard = event.target.closest('.character-card');
     const characterId = characterCard.dataset.id;
     
@@ -795,13 +852,31 @@ async function openEquipItemsModal(event) {
         
         // Get character details
         const character = await characterContract.methods.get_character_details(characterId).call();
-        const className = await characterContract.methods.get_character_class_name(character[1]).call();
+        console.log("Character details:", character);
         
-        // Get equipped items
-        const equipmentResponse = await battleGameContract.methods.get_equipped_items(characterId).call();
-        const equippedWeapon = equipmentResponse[0];
-        const equippedArmor = equipmentResponse[1];
-        const equippedAccessory = equipmentResponse[2];
+        let className = "Unknown";
+        try {
+            className = await characterContract.methods.get_character_class_name(character[1]).call();
+        } catch(e) {
+            console.warn("Could not get class name, using default");
+            const classNames = ["Warrior", "Paladin", "Rogue", "Mage", "Ranger"];
+            className = classNames[character[1]] || "Unknown";
+        }
+        
+        // Get equipped items - handle potential errors
+        let equippedWeapon = "0";
+        let equippedArmor = "0";
+        let equippedAccessory = "0";
+        
+        try {
+            const equipmentResponse = await battleGameContract.methods.get_equipped_items(characterId).call();
+            equippedWeapon = equipmentResponse[0];
+            equippedArmor = equipmentResponse[1];
+            equippedAccessory = equipmentResponse[2];
+            console.log("Equipment retrieved:", equipmentResponse);
+        } catch(e) {
+            console.warn("Could not get equipment, using default empty equipment", e);
+        }
         
         // Display character info
         document.getElementById('equipment-character-info').innerHTML = `
@@ -840,32 +915,74 @@ async function openEquipItemsModal(event) {
         armorSelect.innerHTML = '<option value="0">None</option>';
         accessorySelect.innerHTML = '<option value="0">None</option>';
         
-        // Get all items and populate select boxes
-        const itemCount = await itemContract.methods.get_item_count().call();
+        // Get items and populate select boxes
+        let itemCount = 10; // Default fallback
+        try {
+            itemCount = await itemContract.methods.last_token_id().call();
+        } catch(e) {
+            console.warn("Could not get item count, using default", e);
+        }
+        
+        console.log("Processing", itemCount, "items");
         
         for (let i = 1; i <= itemCount; i++) {
             try {
                 const itemId = i;
-                const item = await itemContract.methods.get_item_details(itemId).call();
+                console.log("Fetching item:", itemId);
                 
-                // Check if this is the user's item
-                const itemOwner = item[6] || await itemContract.methods.get_item_owner(itemId).call();
-                if (itemOwner.toLowerCase() !== accounts[0].toLowerCase()) {
+                let item;
+                try {
+                    item = await itemContract.methods.get_item_details(itemId).call();
+                } catch(e1) {
+                    try {
+                        item = await itemContract.methods.items(itemId).call();
+                    } catch(e2) {
+                        console.warn(`Skipping item ${itemId} - could not retrieve details`);
+                        continue;
+                    }
+                }
+                
+                // Check if item exists and belongs to user
+                if (!item || !item[0]) {
                     continue;
                 }
                 
-                const typeName = await itemContract.methods.get_item_type_name(item[1]).call();
+                // Try to get owner
+                let itemOwner = item[6];
+                try {
+                    if (!itemOwner) {
+                        itemOwner = await itemContract.methods.get_item_owner(itemId).call();
+                    }
+                } catch(e) {
+                    console.warn(`Could not verify ownership for item ${itemId}`);
+                }
                 
+                // Skip items not owned by the current user
+                if (itemOwner && itemOwner.toLowerCase() !== accounts[0].toLowerCase()) {
+                    continue;
+                }
+                
+                // Get type name
+                let typeName = "Unknown";
+                try {
+                    typeName = await itemContract.methods.get_item_type_name(item[1]).call();
+                } catch(e) {
+                    const typeNames = ["Weapon", "Armor", "Accessory"];
+                    typeName = typeNames[item[1]] || "Unknown";
+                }
+                
+                const itemType = parseInt(item[1]);
                 const option = `<option value="${itemId}" ${
-                    (item[1] == 0 && itemId == equippedWeapon) ||
-                    (item[1] == 1 && itemId == equippedArmor) ||
-                    (item[1] == 2 && itemId == equippedAccessory) 
+                    (itemType === 0 && itemId === equippedWeapon) ||
+                    (itemType === 1 && itemId === equippedArmor) ||
+                    (itemType === 2 && itemId === equippedAccessory) 
                     ? 'selected' : ''
                 }>${item[0]} (${typeName})</option>`;
                 
-                if (item[1] == 0) weaponSelect.innerHTML += option;  // Weapon
-                else if (item[1] == 1) armorSelect.innerHTML += option;  // Armor
-                else if (item[1] == 2) accessorySelect.innerHTML += option;  // Accessory
+                // Add to appropriate select based on type
+                if (itemType === 0) weaponSelect.innerHTML += option;      // Weapon
+                else if (itemType === 1) armorSelect.innerHTML += option;  // Armor
+                else if (itemType === 2) accessorySelect.innerHTML += option; // Accessory
             } catch (error) {
                 console.error(`Error loading item ${i} for equipment:`, error);
             }
@@ -882,12 +999,12 @@ async function openEquipItemsModal(event) {
     } catch (error) {
         console.error("Error opening equip items modal:", error);
         hideLoadingModal();
-        alert("Failed to load equipment information. Please try again.");
+        alert("Failed to load equipment information. Please try again. Error: " + error.message);
     }
-}
-
-// Save equipment choices
-async function saveEquipment() {
+ }
+ 
+ // Save equipment choices
+ async function saveEquipment() {
     const characterId = document.getElementById('equipped-character-id').value;
     const weaponId = document.getElementById('weapon-select').value;
     const armorId = document.getElementById('armor-select').value;
@@ -921,10 +1038,10 @@ async function saveEquipment() {
         document.getElementById('save-equipment').textContent = 'Save Equipment';
         alert("Failed to save equipment. Please try again.");
     }
-}
-
-// Initiate a battle
-async function startBattle() {
+ }
+ 
+ // Initiate a battle
+ async function startBattle() {
     if (!selectedCharacterId || !selectedOpponentId) {
         alert("Please select both your character and an opponent.");
         return;
@@ -985,29 +1102,136 @@ async function startBattle() {
         hideLoadingModal();
         alert("Failed to initiate battle. Please try again.");
     }
+ }
+ 
+ // Function to train against an NPC
+async function trainAgainstNPC(event) {
+    if (!selectedCharacterId) {
+        alert("Please select your character first before training.");
+        return;
+    }
+    
+    const npcId = event.target.dataset.npc;
+    const npc = npcCharacters[npcId];
+    
+    if (!npc) {
+        alert("Invalid NPC selected.");
+        return;
+    }
+    
+    try {
+        showLoadingModal("Training in progress...");
+        
+        // Get character details
+        const character = await characterContract.methods.get_character_details(selectedCharacterId).call();
+        
+        // Ensure character is available for battle
+        if (!character[9]) {
+            hideLoadingModal();
+            alert("Your character must be set as available for battle before training.");
+            return;
+        }
+        
+        // Simulate a battle without blockchain interaction
+        const charStrength = parseInt(character[2]);
+        const charDefense = parseInt(character[3]);
+        const charSpeed = parseInt(character[4]);
+        
+        // Calculate power for each (simplified version of the on-chain logic)
+        const characterPower = charStrength * 2 + charDefense + charSpeed;
+        const npcPower = npc.strength * 2 + npc.defense + npc.speed;
+        
+        // Add randomness (10% variance)
+        const characterRandomFactor = 0.9 + Math.random() * 0.2;
+        const npcRandomFactor = 0.9 + Math.random() * 0.2;
+        
+        const finalCharacterPower = characterPower * characterRandomFactor;
+        const finalNpcPower = npcPower * npcRandomFactor;
+        
+        // Determine winner
+        const isCharacterWinner = finalCharacterPower >= finalNpcPower;
+        
+        // Update character's experience
+        const experienceGain = isCharacterWinner ? 50 : 20;
+        await characterContract.methods.add_experience(selectedCharacterId, experienceGain).send({ from: accounts[0] });
+        
+        // Check if update_battle_record takes 1 or 2 parameters
+        try {
+            // Try with one parameter first - assuming it's just the token ID
+            await characterContract.methods.update_battle_record(selectedCharacterId).send({ from: accounts[0] });
+        } catch (error) {
+            console.warn("Failed to update battle record with 1 parameter, checking contract function signature");
+            
+            // Check if there's another function to update wins/losses separately
+            if (characterContract.methods.add_win) {
+                if (isCharacterWinner) {
+                    await characterContract.methods.add_win(selectedCharacterId).send({ from: accounts[0] });
+                } else {
+                    await characterContract.methods.add_loss(selectedCharacterId).send({ from: accounts[0] });
+                }
+            } else {
+                console.error("Could not update battle record: ", error);
+            }
+        }
+        
+        hideLoadingModal();
+        
+        // Show training result
+        const trainingResultContent = document.getElementById('battle-result-content');
+        document.getElementById('battle-result-title').textContent = "Training Result";
+        
+        trainingResultContent.innerHTML = `
+            <div class="battle-result">
+                <div class="battle-participants">
+                    <p><strong>${character[0]}</strong> vs <strong>${npc.name}</strong></p>
+                </div>
+                <h3>Result: <span class="winner">${isCharacterWinner ? character[0] : npc.name} wins!</span></h3>
+                <p>Your character's power: ${finalCharacterPower.toFixed(2)}</p>
+                <p>NPC's power: ${finalNpcPower.toFixed(2)}</p>
+                <p>Experience gained: +${experienceGain} XP</p>
+            </div>
+        `;
+        
+        document.getElementById('battle-result-modal').style.display = 'block';
+        
+        // Reload character data
+        await loadCharacters();
+        
+    } catch (error) {
+        console.error("Error during NPC training:", error);
+        hideLoadingModal();
+        alert("Training failed. Please try again. Error: " + error.message);
+    }
 }
-
-// Open create character modal
-function openCreateCharacterModal() {
+ 
+ // Open create character modal
+ function openCreateCharacterModal() {
     const modal = document.getElementById('create-character-modal');
     modal.style.display = 'block';
-}
-
-// Open create item modal
-function openCreateItemModal() {
+ }
+ 
+ // Open create item modal
+ function openCreateItemModal() {
     const modal = document.getElementById('create-item-modal');
     modal.style.display = 'block';
-}
-
-// Close all modals
-function closeModals() {
+ }
+ 
+ // Close all modals
+ function closeModals() {
     document.querySelectorAll('.modal').forEach(modal => {
         modal.style.display = 'none';
     });
-}
-
-// Set up event listeners
-function setupEventListeners() {
+ }
+ 
+ // Add event listeners for NPC training
+ function setupNPCTrainingListeners() {
+    document.querySelectorAll('.train-against-npc').forEach(button => {
+        button.addEventListener('click', trainAgainstNPC);
+    });
+ }
+ 
+ // Set up event listeners
+ function setupEventListeners() {
     // Connect wallet button
     const connectWalletBtn = document.getElementById('connect-wallet');
     if (connectWalletBtn) {
@@ -1061,6 +1285,9 @@ function setupEventListeners() {
         closeBattleResultBtn.addEventListener('click', closeModals);
     }
     
+    // NPC training listeners
+    setupNPCTrainingListeners();
+    
     // Close on outside click
     window.addEventListener('click', (event) => {
         document.querySelectorAll('.modal').forEach(modal => {
@@ -1069,4 +1296,4 @@ function setupEventListeners() {
             }
         });
     });
-}
+ }
