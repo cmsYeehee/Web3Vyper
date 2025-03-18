@@ -1,4 +1,4 @@
-# @version ^0.3.10
+# @version ^0.4.0
 
 # Character class constants
 WARRIOR: constant(uint8) = 0
@@ -19,15 +19,13 @@ struct Character:
     wins: uint16
     losses: uint16
     is_available_for_battle: bool
-
-# Interface for ERC721
-interface ERC721Contract:
-    def ownerOf(token_id: uint256) -> address: view
+    owner: address  # Store owner directly in the Character struct
 
 # State variables
 characters: public(HashMap[uint256, Character])
+character_tokens: public(DynArray[uint256, 1000])  # Track all character tokens
 last_token_id: uint256
-erc721_contract_address: public(address)
+character_owners: public(HashMap[uint256, address])  # Mapping from character ID to owner
 
 # Events
 event CharacterCreated:
@@ -44,14 +42,14 @@ event BattleStatusChanged:
     token_id: indexed(uint256)
     is_available: bool
 
-@external
-def __init__(erc721_address: address):
-    self.erc721_contract_address = erc721_address
+@deploy
+def __init__():
     self.last_token_id = 0
 
 @external
 def create_character(name: String[64], class_choice: uint8) -> uint256:
     assert class_choice <= RANGER, "Invalid class choice"
+    assert len(name) > 0, "Name cannot be empty"
     
     # Increment token ID
     self.last_token_id += 1
@@ -64,7 +62,7 @@ def create_character(name: String[64], class_choice: uint8) -> uint256:
     
     if class_choice == WARRIOR:
         # High strength, medium defense, low speed
-        strength = 8  # Simplified from random
+        strength = 8
         defense = 6
         speed = 4
     elif class_choice == PALADIN:
@@ -99,8 +97,13 @@ def create_character(name: String[64], class_choice: uint8) -> uint256:
         experience: 0,
         wins: 0,
         losses: 0,
-        is_available_for_battle: False
+        is_available_for_battle: False,
+        owner: msg.sender
     })
+    
+    # Record ownership and track token
+    self.character_owners[token_id] = msg.sender
+    self.character_tokens.append(token_id)
     
     log CharacterCreated(token_id, msg.sender, name, class_choice)
     
@@ -108,6 +111,9 @@ def create_character(name: String[64], class_choice: uint8) -> uint256:
 
 @external
 def level_up(token_id: uint256):
+    # Check ownership
+    assert self.character_owners[token_id] == msg.sender, "Not the character owner"
+    
     char: Character = self.characters[token_id]
     
     # Check if enough experience
@@ -118,7 +124,7 @@ def level_up(token_id: uint256):
     char.experience -= required_xp
     char.level += 1
     
-    # Improve stats
+    # Improve stats with some variance
     char.strength += 1
     char.defense += 1
     char.speed += 1
@@ -130,12 +136,18 @@ def level_up(token_id: uint256):
 
 @external
 def add_experience(token_id: uint256, amount: uint16):
+    # Validate token exists
+    assert self.character_owners[token_id] != empty(address), "Invalid token"
+    
     char: Character = self.characters[token_id]
     char.experience += amount
     self.characters[token_id] = char
 
 @external
 def toggle_battle_availability(token_id: uint256):
+    # Check ownership
+    assert self.character_owners[token_id] == msg.sender, "Not the character owner"
+    
     char: Character = self.characters[token_id]
     char.is_available_for_battle = not char.is_available_for_battle
     self.characters[token_id] = char
@@ -144,6 +156,9 @@ def toggle_battle_availability(token_id: uint256):
 
 @external
 def update_battle_record(token_id: uint256, is_winner: bool):
+    # Validate token exists
+    assert self.character_owners[token_id] != empty(address), "Invalid token"
+    
     char: Character = self.characters[token_id]
     
     if is_winner:
@@ -152,6 +167,17 @@ def update_battle_record(token_id: uint256, is_winner: bool):
         char.losses += 1
     
     self.characters[token_id] = char
+
+@view
+@external
+def get_character_count() -> uint256:
+    return len(self.character_tokens)
+
+@view
+@external
+def get_character_at_index(index: uint256) -> uint256:
+    assert index < len(self.character_tokens), "Index out of bounds"
+    return self.character_tokens[index]
 
 @view
 @external
@@ -168,3 +194,26 @@ def get_character_class_name(class_type: uint8) -> String[10]:
         return "Ranger"
     else:
         return "Unknown"
+
+@view
+@external
+def get_character_details(token_id: uint256) -> (String[64], uint8, uint8, uint8, uint8, uint8, uint16, uint16, uint16, bool, address):
+    char: Character = self.characters[token_id]
+    return (
+        char.name, 
+        char.class_type, 
+        char.strength, 
+        char.defense, 
+        char.speed, 
+        char.level, 
+        char.experience, 
+        char.wins, 
+        char.losses, 
+        char.is_available_for_battle, 
+        char.owner
+    )
+
+@view
+@external
+def get_character_owner(token_id: uint256) -> address:
+    return self.character_owners[token_id]
