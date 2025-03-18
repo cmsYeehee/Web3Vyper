@@ -1,175 +1,139 @@
-# Blockchain Battle Arena: Game Design & Architecture
+I'll create a README that reflects the updated methods in your Vyper 0.4.0 contracts:
 
-## Overview 
+# Blockchain Battle Arena: Smart Contract Documentation
 
-Blockchain Battle Arena is a turn-based strategic combat game built on Ethereum using Vyper smart contracts. Players create unique character NFTs from different classes, collect and equip items, and engage in strategic battles with other players. The game leverages blockchain technology to ensure true ownership of characters and items while providing engaging gameplay.
+## Overview
 
-## Game Mechanics
+Blockchain Battle Arena is a decentralized, turn-based strategic combat game built on Ethereum using Vyper 0.4.0 smart contracts. Players create unique character NFTs, collect items, and engage in strategic battles.
 
-### Character System
+## Character Contract Methods
 
-The game features five unique character classes, each with distinctive attributes and fighting styles:
+### Character Creation & Management
 
-- **Warrior**: Front-line fighters with high strength (7-10), medium defense (5-7), and low speed (3-5). Their "Berserker Rage" ability temporarily increases strength by 50% while reducing defense by 25%.
+- `create_character(name: String[64], class_choice: uint8) -> uint256`
+  - Creates a new character NFT
+  - Parameters: Character name, class selection
+  - Returns: Newly minted character token ID
 
-- **Paladin**: Defensive specialists with medium strength (5-7), high defense (7-10), and low speed (3-5). Their "Divine Shield" ability reduces incoming damage by 75% for two turns.
+- `toggle_battle_availability(token_id: uint256)`
+  - Toggles a character's availability for battle
+  - Allows/prevents character from participating in combat
 
-- **Rogue**: Agile fighters with medium strength (5-7), low defense (3-5), and high speed (7-10). Their "Backstab" ability gives a 30% chance to deal double damage on attacks.
+- `level_up(token_id: uint256)`
+  - Increases character level
+  - Requires sufficient experience points
+  - Grants stat improvements
 
-- **Mage**: Glass cannons with high strength (7-10), very low defense (2-4), and medium speed (5-7). Their "Arcane Burst" ability ignores opponent's defense for one attack.
+- `add_experience(token_id: uint256, amount: uint16)`
+  - Adds experience points to a character
+  - Called after battles or special events
 
-- **Ranger**: Balanced fighters with medium strength, defense, and speed (5-7). Their "True Shot" ability has a 15% chance to hit an enemy's weak point for 50% extra damage.
+- `update_battle_record(token_id: uint256, is_winner: bool)`
+  - Updates character's win/loss record
+  - Tracks battle performance
 
-### Item System
+### Utility Methods
 
-Characters can be enhanced with various equipment:
+- `get_character_count() -> uint256`
+  - Returns total number of characters created
 
-- **Weapons**: Increase character strength
-- **Armor**: Increase character defense
-- **Accessories**: Increase character speed
+- `get_character_at_index(index: uint256) -> uint256`
+  - Retrieves character token ID by index
+  - Useful for iterating through characters
 
-Each item has a rarity level (1-5 stars) that determines the magnitude of its stat bonuses.
+- `get_character_class_name(class_type: uint8) -> String[10]`
+  - Converts class ID to human-readable name
+  - Returns class name (e.g., "Warrior", "Mage")
 
-### Battle System
+- `get_character_details(token_id: uint256) -> (...)`
+  - Retrieves comprehensive character information
+  - Returns name, class, stats, experience, battle record
 
-Battles are turn-based with outcomes determined by:
+## Item Contract Methods
 
-1. Character base statistics
-2. Equipment bonuses
-3. Special abilities
-4. Strategic combat actions
-5. A randomness factor for unpredictability
+### Item Creation & Management
 
-Speed determines turn order, and combat features actions like basic attacks, defensive maneuvers, and special ability activation.
+- `create_item(name: String[64], item_type: uint8, rarity: uint8) -> uint256`
+  - Creates a new item NFT
+  - Parameters: Item name, type, rarity
+  - Returns: Newly minted item token ID
 
-### Progression System
+- `transfer_item(item_id: uint256, to: address)`
+  - Transfers item ownership
+  - Requires current owner initiation
 
-Characters improve through:
-- Experience points earned from battles
-- Level progression with stat improvements
-- Equipment upgrades
-- Win/loss record tracking
+### Utility Methods
 
-## Technical Architecture
+- `get_item_count() -> uint256`
+  - Returns total number of items created
 
-### Smart Contracts
+- `get_item_at_index(index: uint256) -> uint256`
+  - Retrieves item token ID by index
 
-The game utilizes three main smart contracts:
+- `get_item_type_name(item_type: uint8) -> String[10]`
+  - Converts item type ID to human-readable name
+  - Returns type name (e.g., "Weapon", "Armor")
 
-1. **Character Contract**: Handles character NFT creation, progression, and ownership
-   - Mints new character NFTs with randomized class-based stats
-   - Manages experience, leveling, and stat improvements
-   - Tracks battle availability and record
+- `get_rarity_stars(rarity: uint8) -> String[5]`
+  - Converts rarity level to star representation
 
-2. **Item Contract**: Manages equipment NFTs
-   - Creates items with varying types, attributes, and rarity
-   - Assigns appropriate stat bonuses
-   - Facilitates ownership and transfers
+- `get_item_details(token_id: uint256) -> (...)`
+  - Retrieves comprehensive item information
+  - Returns name, type, bonuses, rarity
 
-3. **Battle Game Contract**: Coordinates gameplay mechanics
-   - Manages equipment system and stat calculations
-   - Handles battle logic and outcomes
-   - Distributes rewards and experience
-   - Updates character records
+## Battle Game Contract Methods
 
-All contracts implement ERC-721 standards for NFT functionality, enabling true ownership and potential marketplace integration.
+### Battle Management
 
-### Web Interface
+- `equip_item(character_id: uint256, item_id: uint256)`
+  - Equips an item to a character
+  - Requires ownership of both character and item
+  - Assigns item to appropriate slot
 
-The game includes a comprehensive web interface featuring:
+- `battle(character_id1: uint256, character_id2: uint256)`
+  - Initiates battle between two characters
+  - Calculates winner based on power and randomness
+  - Awards experience points
+  - Updates battle records
 
-- Character creation and management
-- Inventory and equipment system
-- Battle arena for opponent selection and combat
-- Wallet integration for blockchain transactions
-- Visual representations of characters, items, and battles
-- Progress tracking and statistics
+### Utility Methods
 
+- `get_equipped_items(character_id: uint256) -> (uint256, uint256, uint256)`
+  - Returns IDs of equipped items
+  - Order: Weapon, Armor, Accessory
 
-Character Creation & Management
+- `get_battle_record(battle_id: uint256) -> (...)`
+  - Retrieves details of a specific battle
+  - Returns participant IDs, winner, timestamp
 
-create_character(name: String[64], class_choice: uint8) -> uint256
-Creates a new character NFT with the specified name and class. Generates appropriate base stats according to class type and returns the newly minted token ID.
-toggle_battle_availability(token_id: uint256)
-Enables or disables a character's availability for battle. Characters must be marked as available before they can participate in combat.
-level_up(token_id: uint256)
-Increases a character's level if they have sufficient experience points. Each level requires progressively more XP (level × 100) and grants stat improvements.
-add_experience(token_id: uint256, amount: uint16)
-Adds experience points to a character. Called by the battle contract when battles conclude.
-update_battle_record(token_id: uint256, is_winner: bool)
-Updates a character's win/loss record after a battle.
-get_character_class_name(class_type: uint8) -> String[10]
-Returns the string name of a character class based on its numeric ID.
-get_special_ability_name(class_type: uint8) -> String[20]
-Returns the name of a character's special ability based on class type.
+- `get_battle_count() -> uint256`
+  - Returns total number of battles
 
-Item Contract Methods
-Item Creation & Properties
+## Battle Mechanics
 
-create_item(name: String[64], item_type: uint8) -> uint256
-Creates a new item NFT with the specified name and type (0=Weapon, 1=Armor, 2=Accessory). Generates appropriate stat bonuses based on randomly determined rarity.
-get_item_type_name(item_type: uint8) -> String[10]
-Returns the string name of an item type based on its numeric ID.
-get_rarity_stars(rarity: uint8) -> String[5]
-Returns a string representation of an item's rarity as stars (e.g., "***" for rarity 3).
+1. Characters must be available for battle
+2. Battle outcome determined by:
+   - Base character stats
+   - Equipped item bonuses
+   - Randomness factor
 
-Battle Game Contract Methods
-Equipment Management
+3. Experience distribution:
+   - Winner: 50 XP
+   - Loser: 20 XP
 
-equip_item(character_id: uint256, item_id: uint256)
-Equips an item to a character. The character and item must both be owned by the caller. Items are equipped to the appropriate slot based on their type.
-get_equipped_items(character_id: uint256) -> (uint256, uint256, uint256)
-Returns the IDs of items currently equipped to a character (weapon, armor, accessory).
+## Deployment Considerations
 
-Battle System
+- Deployed on Ethereum Sepolia Testnet
+- Requires MetaMask wallet connection
+- Gas fees apply for contract interactions
 
-battle(character_id1: uint256, character_id2: uint256)
-Initiates a battle between two characters. The caller must own the first character, and both characters must be marked as available for battle.
-get_battle_record(battle_id: uint256) -> (uint256, uint256, uint256, uint256)
-Returns details about a completed battle: the IDs of both participants, the winner's ID, and the timestamp.
-get_character_battles(character_id: uint256) -> DynArray[uint256, 100]
-Returns an array of battle IDs that a specific character has participated in.
-get_battle_count() -> uint256
-Returns the total number of battles that have occurred.
+## Getting Started
 
-Internal Logic
+1. Connect MetaMask wallet
+2. Create characters
+3. Acquire items
+4. Equip items
+5. Battle other characters
+6. Level up and improve your roster
 
-_calculate_total_power(character_id: uint256, strength: uint8, defense: uint8, speed: uint8) -> uint256
-Calculates a character's total power by combining base stats with equipment bonuses. Used to determine battle outcomes.
-
-How Combat Works
-
-A player initiates a battle by calling battle() with their character ID and an opponent's character ID.
-The contract verifies ownership and availability of both characters.
-Total power is calculated for each character by:
-
-Adding base stats (strength, defense, speed)
-Including equipment bonuses from weapons, armor, and accessories
-Applying a randomness factor (±20%) for unpredictability
-
-
-The character with the higher adjusted power wins the battle.
-Experience points are awarded to both characters:
-
-Winners receive 50 XP
-Losers receive 20 XP
-
-
-Battle records are updated for both characters and stored in the battle history.
-When a character accumulates enough XP (level × 100), they can level up by calling level_up().
-
-Using the System
-Character Creation and Management Flow:
-
-Call create_character() to mint a new character NFT
-Equip items using equip_item()
-Make your character available for battle with toggle_battle_availability()
-Initiate battles with battle()
-After gaining enough experience, call level_up() to improve your character
-
-Item Acquisition Flow:
-
-The contract owner creates items using create_item()
-Items are acquired by players through initial distribution or trading
-Players equip items to their characters using equip_item()
-Equipment bonuses automatically apply in battles
+Would you like me to elaborate on any specific section or provide more details about the contract interactions?
