@@ -53,6 +53,27 @@ const characterABI = [
         "outputs": [{"internalType": "string", "name": "", "type": "string"}],
         "stateMutability": "view",
         "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "get_character_count",
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [{"internalType": "uint256", "name": "index", "type": "uint256"}],
+        "name": "get_character_at_index",
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [{"internalType": "uint256", "name": "token_id", "type": "uint256"}],
+        "name": "get_character_owner",
+        "outputs": [{"internalType": "address", "name": "", "type": "address"}],
+        "stateMutability": "view",
+        "type": "function"
     }
 ];
 
@@ -60,8 +81,7 @@ const itemABI = [
     {
         "inputs": [
             {"internalType": "string", "name": "name", "type": "string"},
-            {"internalType": "uint8", "name": "item_type", "type": "uint8"},
-            {"internalType": "uint8", "name": "rarity", "type": "uint8"}
+            {"internalType": "uint8", "name": "item_type", "type": "uint8"}
         ],
         "name": "create_item",
         "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
@@ -87,6 +107,20 @@ const itemABI = [
         "inputs": [{"internalType": "uint8", "name": "item_type", "type": "uint8"}],
         "name": "get_item_type_name",
         "outputs": [{"internalType": "string", "name": "", "type": "string"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "last_token_id",
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [{"internalType": "uint256", "name": "item_id", "type": "uint256"}],
+        "name": "get_item_owner",
+        "outputs": [{"internalType": "address", "name": "", "type": "address"}],
         "stateMutability": "view",
         "type": "function"
     }
@@ -135,6 +169,13 @@ const battleGameABI = [
         ],
         "stateMutability": "view",
         "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "battle_count",
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function"
     }
 ];
 
@@ -165,13 +206,22 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize Firebase after scripts are loaded
     firebaseAppScript.onload = function() {
         firebaseAnalyticsScript.onload = function() {
-            const app = firebase.initializeApp(firebaseConfig);
-            const analytics = firebase.analytics();
+            try {
+                const app = firebase.initializeApp(firebaseConfig);
+                const analytics = firebase.analytics();
+                console.log("Firebase initialized successfully");
+            } catch (error) {
+                console.warn("Firebase initialization failed:", error);
+                // Continue with the app anyway, as Firebase is not critical
+            }
             
             // Initialize the application
             init();
         };
     };
+
+    // Add event listeners for the web app
+    setupEventListeners();
 });
 
 // Initialize the application
@@ -191,7 +241,10 @@ async function init() {
             itemContract = new web3.eth.Contract(itemABI, itemContractAddress);
             battleGameContract = new web3.eth.Contract(battleGameABI, battleGameContractAddress);
             
-            // Load characters and items
+            // Map contract functions to expected names
+            fixContractFunctionMappings();
+            
+            // Load data
             await loadCharacters();
             await loadItems();
             await loadBattleHistory();
@@ -208,6 +261,42 @@ async function init() {
     } else {
         console.error("MetaMask not detected");
         alert("Please install MetaMask to use this application");
+    }
+}
+
+// Fix contract function mappings to match expected calls
+function fixContractFunctionMappings() {
+    // Map character functions
+    if (!characterContract.methods.get_character_details && characterContract.methods.characters) {
+        characterContract.methods.get_character_details = characterContract.methods.characters;
+    }
+    
+    // Map item functions
+    if (!itemContract.methods.get_item_details && itemContract.methods.items) {
+        itemContract.methods.get_item_details = itemContract.methods.items;
+    }
+    
+    if (!itemContract.methods.get_item_count) {
+        itemContract.methods.get_item_count = async function() {
+            try {
+                const lastId = await itemContract.methods.last_token_id().call();
+                return lastId;
+            } catch (e) {
+                console.warn("Could not get item count:", e);
+                return 10; // Fallback
+            }
+        };
+    }
+    
+    if (!itemContract.methods.get_item_at_index) {
+        itemContract.methods.get_item_at_index = async function(index) {
+            return parseInt(index) + 1; // Simple index mapping
+        };
+    }
+    
+    // Map battle game functions
+    if (!battleGameContract.methods.get_battle_count && battleGameContract.methods.battle_count) {
+        battleGameContract.methods.get_battle_count = battleGameContract.methods.battle_count;
     }
 }
 
@@ -238,41 +327,123 @@ function handleAccountsChanged(newAccounts) {
     }
 }
 
+// Show loading indicator
+function showLoadingIndicator(elementId, message = "Loading...") {
+    const element = document.getElementById(elementId);
+    element.innerHTML = `<div class="loading-spinner"></div><p>${message}</p>`;
+}
+
+// Show the loading modal
+function showLoadingModal(message = "Processing transaction...") {
+    const modal = document.getElementById('loading-modal');
+    const messageElem = document.getElementById('loading-message');
+    messageElem.textContent = message;
+    modal.style.display = 'block';
+}
+
+// Hide the loading modal
+function hideLoadingModal() {
+    const modal = document.getElementById('loading-modal');
+    modal.style.display = 'none';
+}
+
+// Get class icon based on class type
+function getClassIcon(classType) {
+    const icons = ["⚔️", "🛡️", "🗡️", "🔮", "🏹"];
+    return icons[classType] || "👤";
+}
+
+// Get item icon based on item type
+function getItemIcon(typeId) {
+    const icons = {
+        "0": "⚔️", // Weapon
+        "1": "🛡️", // Armor
+        "2": "💍"  // Accessory
+    };
+    return icons[typeId] || "📦";
+}
+
 // Load characters owned by the current user
 async function loadCharacters() {
     const characterListElem = document.getElementById('character-list');
-    characterListElem.innerHTML = '<p>Loading characters...</p>';
+    showLoadingIndicator('character-list', "Loading characters...");
     
     try {
-        // Get character count and load characters
-        const characterCount = await characterContract.methods.get_character_count().call();
+        // Get character count
+        let characterCount = 0;
+        try {
+            characterCount = await characterContract.methods.get_character_count().call();
+        } catch (e) {
+            console.warn("Error getting character count:", e);
+            characterCount = 10; // Try the first 10 character IDs as fallback
+        }
+        
         let charactersHTML = '';
         
         for (let i = 0; i < characterCount; i++) {
             try {
-                const characterId = await characterContract.methods.get_character_at_index(i).call();
+                // Get character ID
+                let characterId;
+                try {
+                    characterId = await characterContract.methods.get_character_at_index(i).call();
+                } catch (e) {
+                    characterId = i + 1; // Fallback to index + 1
+                }
+                
+                // Get character details
                 const character = await characterContract.methods.get_character_details(characterId).call();
+                
+                // Check if this character belongs to the current user
+                const owner = character[10] || await characterContract.methods.get_character_owner(characterId).call();
+                if (owner.toLowerCase() !== accounts[0].toLowerCase()) {
+                    continue;
+                }
+                
                 const className = await characterContract.methods.get_character_class_name(character[1]).call();
+                const classIcon = getClassIcon(character[1]);
+                
+                // Calculate XP percentage
+                const xpRequired = character[5] * 100;
+                const xpPercentage = xpRequired > 0 ? (character[6] / xpRequired) * 100 : 0;
                 
                 charactersHTML += `
-                    <div class="character-card" data-id="${characterId}">
+                    <div class="character-card ${className.toLowerCase()}" data-id="${characterId}">
                         <h3>${character[0]}</h3>
+                        <div class="character-image ${className.toLowerCase()}">${classIcon}</div>
                         <div class="character-stats">
-                            <p>Class: ${className}</p>
-                            <p>Level: ${character[5]}</p>
-                            <p>Strength: ${character[2]}</p>
-                            <p>Defense: ${character[3]}</p>
-                            <p>Speed: ${character[4]}</p>
-                            <p>W/L: ${character[7]}/${character[8]}</p>
-                            <div class="status-bar xp-bar">
-                                <div class="status-fill" style="width: ${(character[6] / (character[5] * 100)) * 100}%"></div>
+                            <div class="stat-row">
+                                <span class="stat-label">Class:</span>
+                                <span>${className}</span>
                             </div>
-                            <p>XP: ${character[6]}/${character[5] * 100}</p>
+                            <div class="stat-row">
+                                <span class="stat-label">Level:</span>
+                                <span>${character[5]}</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-label">STR:</span>
+                                <span>${character[2]}</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-label">DEF:</span>
+                                <span>${character[3]}</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-label">SPD:</span>
+                                <span>${character[4]}</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-label">W/L:</span>
+                                <span>${character[7]}/${character[8]}</span>
+                            </div>
+                            <div class="status-bar xp-bar" title="XP: ${character[6]}/${xpRequired}">
+                                <div class="status-fill" style="width: ${xpPercentage}%"></div>
+                            </div>
+                            <p>XP: ${character[6]}/${xpRequired}</p>
                         </div>
                         <div class="character-actions">
-                            <button class="select-character-btn">Select for Battle</button>
-                            <button class="toggle-availability-btn">${character[9] ? 'Set Unavailable' : 'Set Available'}</button>
-                            <button class="equip-items-btn">Equip Items</button>
+                            <button class="select-character-btn btn-secondary">Select for Battle</button>
+                            <button class="toggle-availability-btn ${character[9] ? 'btn-danger' : 'btn-success'}">${character[9] ? 'Set Unavailable' : 'Set Available'}</button>
+                            <button class="equip-items-btn btn-secondary">Equip Items</button>
                         </div>
                     </div>
                 `;
@@ -282,7 +453,7 @@ async function loadCharacters() {
         }
         
         if (charactersHTML === '') {
-            characterListElem.innerHTML = '<p>No characters found. Create a new character to start!</p>';
+            characterListElem.innerHTML = '<p class="placeholder-message">No characters found. Create a new character to start!</p>';
         } else {
             characterListElem.innerHTML = charactersHTML;
             
@@ -301,61 +472,138 @@ async function loadCharacters() {
         }
     } catch (error) {
         console.error("Error loading characters:", error);
-        characterListElem.innerHTML = '<p>Error loading characters. Please try again.</p>';
+        characterListElem.innerHTML = '<p class="placeholder-message">Error loading characters. Please try again.</p>';
     }
 }
 
 // Load items owned by the current user
 async function loadItems() {
     const itemListElem = document.getElementById('item-list');
-    itemListElem.innerHTML = '<p>Loading items...</p>';
+    showLoadingIndicator('item-list', "Loading items...");
     
     try {
-        const itemCount = await itemContract.methods.get_item_count().call();
+        // Get item count
+        let itemCount = 0;
+        try {
+            itemCount = await itemContract.methods.get_item_count().call();
+        } catch (e) {
+            try {
+                itemCount = await itemContract.methods.last_token_id().call();
+            } catch (e2) {
+                console.warn("Could not determine item count, attempting alternative approach");
+                itemCount = 10; // Fallback: try the first 10 item IDs
+            }
+        }
+        
         let itemsHTML = '';
         
-        for (let i = 0; i < itemCount; i++) {
+        for (let i = 1; i <= itemCount; i++) {
             try {
-                const itemId = await itemContract.methods.get_item_at_index(i).call();
-                const item = await itemContract.methods.get_item_details(itemId).call();
-                const typeName = await itemContract.methods.get_item_type_name(item[1]).call();
+                // Try different approaches to get item details
+                let item;
+                let itemId = i;
+                
+                try {
+                    if (itemContract.methods.get_item_at_index) {
+                        itemId = await itemContract.methods.get_item_at_index(i - 1).call();
+                    }
+                } catch (e) {
+                    console.warn(`Could not get item at index ${i-1}, using ID ${itemId} directly`);
+                }
+                
+                try {
+                    item = await itemContract.methods.get_item_details(itemId).call();
+                } catch (e) {
+                    console.warn(`Could not get details for item ${itemId}:`, e);
+                    continue;
+                }
+                
+                // Get item owner
+                let itemOwner;
+                try {
+                    itemOwner = await itemContract.methods.get_item_owner(itemId).call();
+                } catch (e) {
+                    itemOwner = item[6] || "unknown";
+                }
+                
+                // Skip items not owned by current user
+                if (itemOwner.toLowerCase() !== accounts[0].toLowerCase()) {
+                    continue;
+                }
+                
+                // Get item type name
+                let typeName;
+                try {
+                    typeName = await itemContract.methods.get_item_type_name(item[1]).call();
+                } catch (e) {
+                    const typeNames = ["Weapon", "Armor", "Accessory"];
+                    typeName = typeNames[item[1]] || "Unknown";
+                }
+                
+                const itemIcon = getItemIcon(item[1]);
+                const rarity = item[5] || 3;
+                const rarityStars = '★'.repeat(parseInt(rarity));
                 
                 itemsHTML += `
-                    <div class="item-card" data-id="${itemId}" data-type="${item[1]}">
+                    <div class="item-card rarity-${rarity}" data-id="${itemId}" data-type="${item[1]}">
                         <h3>${item[0]}</h3>
+                        <div class="item-icon type-${item[1]}">${itemIcon}</div>
                         <div class="item-stats">
-                            <p>Type: ${typeName}</p>
-                            <p>Strength: +${item[2]}</p>
-                            <p>Defense: +${item[3]}</p>
-                            <p>Speed: +${item[4]}</p>
+                            <div class="stat-row">
+                                <span class="stat-label">Type:</span>
+                                <span>${typeName}</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-label">Strength:</span>
+                                <span>+${item[2]}</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-label">Defense:</span>
+                                <span>+${item[3]}</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-label">Speed:</span>
+                                <span>+${item[4]}</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-label">Rarity:</span>
+                                <span>${rarityStars}</span>
+                            </div>
                         </div>
                     </div>
                 `;
             } catch (error) {
-                console.error(`Error loading item at index ${i}:`, error);
+                console.error(`Error loading item ${i}:`, error);
             }
         }
         
         if (itemsHTML === '') {
-            itemListElem.innerHTML = '<p>No items found.</p>';
+            itemListElem.innerHTML = '<p class="placeholder-message">No items found. Create new items to get started!</p>';
         } else {
             itemListElem.innerHTML = itemsHTML;
         }
     } catch (error) {
         console.error("Error loading items:", error);
-        itemListElem.innerHTML = '<p>Error loading items. Please try again.</p>';
+        itemListElem.innerHTML = '<p class="placeholder-message">Error loading items. Please try again.</p>';
     }
 }
 
 // Load battle history
 async function loadBattleHistory() {
     const battleHistoryElem = document.getElementById('battle-history');
-    battleHistoryElem.innerHTML = '<p>Loading battle history...</p>';
+    showLoadingIndicator('battle-history', "Loading battle history...");
     
     try {
-        const battleCount = await battleGameContract.methods.get_battle_count().call();
+        // Get battle count
+        let battleCount = 0;
+        try {
+            battleCount = await battleGameContract.methods.get_battle_count().call();
+        } catch (e) {
+            console.warn("Error getting battle count:", e);
+            battleCount = 0;
+        }
         
-        if (battleCount > 0) {
+        if (parseInt(battleCount) > 0) {
             let battleHistoryHTML = '';
             
             for (let i = 0; i < battleCount; i++) {
@@ -372,9 +620,13 @@ async function loadBattleHistory() {
                     battleHistoryHTML += `
                         <div class="battle-card">
                             <h3>Battle #${i + 1}</h3>
-                            <p><strong>${char1[0]}</strong> vs <strong>${char2[0]}</strong></p>
-                            <p>Winner: <strong>${winner[0]}</strong></p>
-                            <p>Date: ${battleDate}</p>
+                            <div class="battle-participants">
+                                <p>${char1[0]} vs ${char2[0]}</p>
+                            </div>
+                            <div class="battle-result">
+                                <p>Winner: <span class="winner">${winner[0]}</span></p>
+                                <p>Date: ${battleDate}</p>
+                            </div>
                         </div>
                     `;
                 } catch (error) {
@@ -384,11 +636,11 @@ async function loadBattleHistory() {
             
             battleHistoryElem.innerHTML = battleHistoryHTML;
         } else {
-            battleHistoryElem.innerHTML = '<p>No battles yet.</p>';
+            battleHistoryElem.innerHTML = '<p class="placeholder-message">No battles yet. Select characters and start battling!</p>';
         }
     } catch (error) {
         console.error("Error loading battle history:", error);
-        battleHistoryElem.innerHTML = '<p>Error loading battle history. Please try again.</p>';
+        battleHistoryElem.innerHTML = '<p class="placeholder-message">Error loading battle history. Please try again.</p>';
     }
 }
 
@@ -413,9 +665,14 @@ function selectCharacterForBattle(event) {
         characterCard.classList.add('selected-character');
         
         // Clone the character card and display it in the battle arena
-        const characterInfo = characterCard.querySelector('.character-stats').cloneNode(true);
-        document.getElementById('your-character').innerHTML = `<h3>${characterCard.querySelector('h3').textContent}</h3>`;
-        document.getElementById('your-character').appendChild(characterInfo);
+        const characterName = characterCard.querySelector('h3').textContent;
+        const characterStats = characterCard.querySelector('.character-stats').cloneNode(true);
+        const characterImg = characterCard.querySelector('.character-image').cloneNode(true);
+        
+        const yourCharElem = document.getElementById('your-character');
+        yourCharElem.innerHTML = `<h3>${characterName}</h3>`;
+        yourCharElem.appendChild(characterImg);
+        yourCharElem.appendChild(characterStats);
     }
     
     updateBattleButton();
@@ -442,9 +699,14 @@ async function selectOpponent(event) {
         characterCard.classList.add('selected-opponent');
         
         // Clone the character card and display it in the battle arena
-        const characterInfo = characterCard.querySelector('.character-stats').cloneNode(true);
-        document.getElementById('opponent-character').innerHTML = `<h3>${characterCard.querySelector('h3').textContent}</h3>`;
-        document.getElementById('opponent-character').appendChild(characterInfo);
+        const characterName = characterCard.querySelector('h3').textContent;
+        const characterStats = characterCard.querySelector('.character-stats').cloneNode(true);
+        const characterImg = characterCard.querySelector('.character-image').cloneNode(true);
+        
+        const opponentElem = document.getElementById('opponent-character');
+        opponentElem.innerHTML = `<h3>${characterName}</h3>`;
+        opponentElem.appendChild(characterImg);
+        opponentElem.appendChild(characterStats);
     }
     
     updateBattleButton();
@@ -462,12 +724,17 @@ async function toggleCharacterAvailability(event) {
     const characterId = characterCard.dataset.id;
     
     try {
+        showLoadingModal("Toggling character availability...");
+        
         await characterContract.methods.toggle_battle_availability(characterId).send({ from: accounts[0] });
         
         // Reload characters to reflect the change
         await loadCharacters();
+        
+        hideLoadingModal();
     } catch (error) {
         console.error("Error toggling character availability:", error);
+        hideLoadingModal();
         alert("Failed to toggle character availability. Please try again.");
     }
 }
@@ -480,14 +747,41 @@ async function createCharacter(event) {
     const classChoice = document.getElementById('character-class').value;
     
     try {
+        showLoadingModal("Creating character...");
+        
         await characterContract.methods.create_character(name, classChoice).send({ from: accounts[0] });
         
+        hideLoadingModal();
         alert("Character created successfully!");
         closeModals();
         await loadCharacters();
     } catch (error) {
         console.error("Error creating character:", error);
+        hideLoadingModal();
         alert("Failed to create character. Please try again.");
+    }
+}
+
+// Create a new item
+async function createItem(event) {
+    event.preventDefault();
+    
+    const name = document.getElementById('item-name').value;
+    const itemType = document.getElementById('item-type').value;
+    
+    try {
+        showLoadingModal("Creating item...");
+        
+        await itemContract.methods.create_item(name, itemType).send({ from: accounts[0] });
+        
+        hideLoadingModal();
+        alert("Item created successfully!");
+        closeModals();
+        await loadItems();
+    } catch (error) {
+        console.error("Error creating item:", error);
+        hideLoadingModal();
+        alert("Failed to create item. Please try again.");
     }
 }
 
@@ -497,6 +791,8 @@ async function openEquipItemsModal(event) {
     const characterId = characterCard.dataset.id;
     
     try {
+        showLoadingModal("Loading equipment data...");
+        
         // Get character details
         const character = await characterContract.methods.get_character_details(characterId).call();
         const className = await characterContract.methods.get_character_class_name(character[1]).call();
@@ -511,12 +807,29 @@ async function openEquipItemsModal(event) {
         document.getElementById('equipment-character-info').innerHTML = `
             <h3>${character[0]} (${className})</h3>
             <div class="character-stats">
-                <p>Level: ${character[5]}</p>
-                <p>Strength: ${character[2]}</p>
-                <p>Defense: ${character[3]}</p>
-                <p>Speed: ${character[4]}</p>
+                <div class="stat-row">
+                    <span class="stat-label">Level:</span>
+                    <span>${character[5]}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Strength:</span>
+                    <span>${character[2]}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Defense:</span>
+                    <span>${character[3]}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Speed:</span>
+                    <span>${character[4]}</span>
+                </div>
             </div>
         `;
+        
+        // Set icons in equipment slots
+        document.getElementById('weapon-slot').innerHTML = equippedWeapon !== "0" ? "⚔️" : "";
+        document.getElementById('armor-slot').innerHTML = equippedArmor !== "0" ? "🛡️" : "";
+        document.getElementById('accessory-slot').innerHTML = equippedAccessory !== "0" ? "💍" : "";
         
         // Prepare select boxes for items
         const weaponSelect = document.getElementById('weapon-select');
@@ -530,32 +843,83 @@ async function openEquipItemsModal(event) {
         // Get all items and populate select boxes
         const itemCount = await itemContract.methods.get_item_count().call();
         
-        for (let i = 0; i < itemCount; i++) {
-            const itemId = await itemContract.methods.get_item_at_index(i).call();
-            const item = await itemContract.methods.get_item_details(itemId).call();
-            const typeName = await itemContract.methods.get_item_type_name(item[1]).call();
-            
-            const option = `<option value="${itemId}" ${
-                (item[1] === "0" && itemId === equippedWeapon) ||
-                (item[1] === "1" && itemId === equippedArmor) ||
-                (item[1] === "2" && itemId === equippedAccessory) 
-                ? 'selected' : ''
-            }>${item[0]} (${typeName})</option>`;
-            
-            if (item[1] === "0") weaponSelect.innerHTML += option;
-            else if (item[1] === "1") armorSelect.innerHTML += option;
-            else if (item[1] === "2") accessorySelect.innerHTML += option;
+        for (let i = 1; i <= itemCount; i++) {
+            try {
+                const itemId = i;
+                const item = await itemContract.methods.get_item_details(itemId).call();
+                
+                // Check if this is the user's item
+                const itemOwner = item[6] || await itemContract.methods.get_item_owner(itemId).call();
+                if (itemOwner.toLowerCase() !== accounts[0].toLowerCase()) {
+                    continue;
+                }
+                
+                const typeName = await itemContract.methods.get_item_type_name(item[1]).call();
+                
+                const option = `<option value="${itemId}" ${
+                    (item[1] == 0 && itemId == equippedWeapon) ||
+                    (item[1] == 1 && itemId == equippedArmor) ||
+                    (item[1] == 2 && itemId == equippedAccessory) 
+                    ? 'selected' : ''
+                }>${item[0]} (${typeName})</option>`;
+                
+                if (item[1] == 0) weaponSelect.innerHTML += option;  // Weapon
+                else if (item[1] == 1) armorSelect.innerHTML += option;  // Armor
+                else if (item[1] == 2) accessorySelect.innerHTML += option;  // Accessory
+            } catch (error) {
+                console.error(`Error loading item ${i} for equipment:`, error);
+            }
         }
         
         // Set the character ID for equipment
         document.getElementById('equipped-character-id').value = characterId;
+        
+        hideLoadingModal();
         
         // Show the modal
         const modal = document.getElementById('equip-items-modal');
         modal.style.display = 'block';
     } catch (error) {
         console.error("Error opening equip items modal:", error);
+        hideLoadingModal();
         alert("Failed to load equipment information. Please try again.");
+    }
+}
+
+// Save equipment choices
+async function saveEquipment() {
+    const characterId = document.getElementById('equipped-character-id').value;
+    const weaponId = document.getElementById('weapon-select').value;
+    const armorId = document.getElementById('armor-select').value;
+    const accessoryId = document.getElementById('accessory-select').value;
+    
+    try {
+        showLoadingModal("Saving equipment...");
+        document.getElementById('save-equipment').textContent = 'Saving...';
+        
+        // Equip each item if selected and changed
+        if (weaponId !== "0") {
+            await battleGameContract.methods.equip_item(characterId, weaponId).send({ from: accounts[0] });
+        }
+        
+        if (armorId !== "0") {
+            await battleGameContract.methods.equip_item(characterId, armorId).send({ from: accounts[0] });
+        }
+        
+        if (accessoryId !== "0") {
+            await battleGameContract.methods.equip_item(characterId, accessoryId).send({ from: accounts[0] });
+        }
+        
+        hideLoadingModal();
+        document.getElementById('save-equipment').textContent = 'Save Equipment';
+        alert("Equipment saved successfully!");
+        closeModals();
+        await loadCharacters();
+    } catch (error) {
+        console.error("Error saving equipment:", error);
+        hideLoadingModal();
+        document.getElementById('save-equipment').textContent = 'Save Equipment';
+        alert("Failed to save equipment. Please try again.");
     }
 }
 
@@ -567,6 +931,9 @@ async function startBattle() {
     }
     
     try {
+        showLoadingModal("Battle in progress...");
+        
+        // Initiate the battle
         await battleGameContract.methods.battle(selectedCharacterId, selectedOpponentId).send({ from: accounts[0] });
         
         // Get the latest battle
@@ -579,12 +946,16 @@ async function startBattle() {
         const char2 = await characterContract.methods.get_character_details(battle[1]).call();
         const winner = await characterContract.methods.get_character_details(battle[2]).call();
         
+        hideLoadingModal();
+        
         // Display battle result
         const battleResultContent = document.getElementById('battle-result-content');
         battleResultContent.innerHTML = `
             <div class="battle-result">
-                <p><strong>${char1[0]}</strong> vs <strong>${char2[0]}</strong></p>
-                <h3>Winner: ${winner[0]}</h3>
+                <div class="battle-participants">
+                    <p><strong>${char1[0]}</strong> vs <strong>${char2[0]}</strong></p>
+                </div>
+                <h3>Winner: <span class="winner">${winner[0]}</span></h3>
                 <p>Experience earned:</p>
                 <p>${winner[0]}: +50 XP</p>
                 <p>${winner[0] === char1[0] ? char2[0] : char1[0]}: +20 XP</p>
@@ -603,32 +974,40 @@ async function startBattle() {
         document.getElementById('your-character').innerHTML = '<h3>Your Character</h3><p>Select a character from your collection</p>';
         document.getElementById('opponent-character').innerHTML = '<h3>Opponent</h3><p>Select an opponent to battle</p>';
         
+        // Update battle button
+        updateBattleButton();
+        
         // Reload data
         await loadCharacters();
         await loadBattleHistory();
     } catch (error) {
         console.error("Error initiating battle:", error);
+        hideLoadingModal();
         alert("Failed to initiate battle. Please try again.");
     }
 }
 
-// Utility functions for modals and event listeners
+// Open create character modal
 function openCreateCharacterModal() {
     const modal = document.getElementById('create-character-modal');
     modal.style.display = 'block';
 }
 
+// Open create item modal
+function openCreateItemModal() {
+    const modal = document.getElementById('create-item-modal');
+    modal.style.display = 'block';
+}
+
+// Close all modals
 function closeModals() {
     document.querySelectorAll('.modal').forEach(modal => {
         modal.style.display = 'none';
     });
 }
 
-// Event Listeners
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize the application
-    init();
-    
+// Set up event listeners
+function setupEventListeners() {
     // Connect wallet button
     const connectWalletBtn = document.getElementById('connect-wallet');
     if (connectWalletBtn) {
@@ -641,10 +1020,28 @@ document.addEventListener('DOMContentLoaded', function() {
         createCharacterBtn.addEventListener('click', openCreateCharacterModal);
     }
     
+    // Create item button
+    const createItemBtn = document.getElementById('create-item-btn');
+    if (createItemBtn) {
+        createItemBtn.addEventListener('click', openCreateItemModal);
+    }
+    
     // Create character form
     const createCharacterForm = document.getElementById('create-character-form');
     if (createCharacterForm) {
         createCharacterForm.addEventListener('submit', createCharacter);
+    }
+    
+    // Create item form
+    const createItemForm = document.getElementById('create-item-form');
+    if (createItemForm) {
+        createItemForm.addEventListener('submit', createItem);
+    }
+    
+    // Equipment save button
+    const saveEquipmentBtn = document.getElementById('save-equipment');
+    if (saveEquipmentBtn) {
+        saveEquipmentBtn.addEventListener('click', saveEquipment);
     }
     
     // Start battle button
@@ -657,4 +1054,19 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.close').forEach(closeBtn => {
         closeBtn.addEventListener('click', closeModals);
     });
-});
+    
+    // Close battle result button
+    const closeBattleResultBtn = document.getElementById('close-battle-result');
+    if (closeBattleResultBtn) {
+        closeBattleResultBtn.addEventListener('click', closeModals);
+    }
+    
+    // Close on outside click
+    window.addEventListener('click', (event) => {
+        document.querySelectorAll('.modal').forEach(modal => {
+            if (event.target == modal) {
+                modal.style.display = 'none';
+            }
+        });
+    });
+}
