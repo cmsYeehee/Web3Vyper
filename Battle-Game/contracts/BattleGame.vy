@@ -51,6 +51,31 @@ event SystemError:
     code: uint8
     message: String[100]
 
+# Add these new structs after the existing structs
+struct ItemListing:
+    seller: address
+    item_id: uint256
+    price: uint256
+    active: bool
+
+# Add these new state variables after the existing ones
+listings: public(HashMap[uint256, ItemListing])
+listing_count: public(uint256)
+
+# Add these new events after the existing events
+event ItemListed:
+    listing_id: indexed(uint256)
+    item_id: indexed(uint256)
+    seller: indexed(address)
+    price: uint256
+
+event ItemSold:
+    listing_id: indexed(uint256)
+    item_id: indexed(uint256)
+    seller: indexed(address)
+    buyer: address
+    price: uint256
+
 @external
 def __init__(character_address: address, item_address: address):
     self.character_contract_address = character_address
@@ -259,3 +284,65 @@ def get_battle_record(battle_id: uint256) -> (uint256, uint256, uint256, uint256
 @external
 def verify_contracts() -> (address, address):
     return (self.character_contract_address, self.item_contract_address)
+
+@external
+@payable
+def list_item_for_sale(item_id: uint256, price: uint256):
+    """
+    @notice List an item for sale
+    @param item_id: The ID of the item to list
+    @param price: The price in wei (Sepolia ETH)
+    """
+    assert price > 0, "Price must be greater than 0"
+    
+    # Verify item ownership
+    item_owner: address = ItemContract(self.item_contract_address).get_item_owner(item_id)
+    assert item_owner == msg.sender, "Not item owner"
+    
+    # Create new listing
+    listing_id: uint256 = self.listing_count
+    self.listing_count += 1
+    
+    self.listings[listing_id] = ItemListing({
+        seller: msg.sender,
+        item_id: item_id,
+        price: price,
+        active: True
+    })
+    
+    log ItemListed(listing_id, item_id, msg.sender, price)
+
+@external
+@payable
+def buy_item(listing_id: uint256):
+    """
+    @notice Buy a listed item
+    @param listing_id: The ID of the listing to purchase
+    """
+    listing: ItemListing = self.listings[listing_id]
+    assert listing.active, "Listing is not active"
+    assert msg.value >= listing.price, "Insufficient payment"
+    assert msg.sender != listing.seller, "Cannot buy your own item"
+    
+    # Transfer payment to seller
+    send(listing.seller, listing.price)
+    
+    # Refund excess payment if any
+    if msg.value > listing.price:
+        send(msg.sender, msg.value - listing.price)
+    
+    # Mark listing as inactive
+    self.listings[listing_id].active = False
+    
+    log ItemSold(listing_id, listing.item_id, listing.seller, msg.sender, listing.price)
+
+@view
+@external
+def get_listing(listing_id: uint256) -> (address, uint256, uint256, bool):
+    """
+    @notice Get details of a listing
+    @param listing_id: The ID of the listing
+    @return: Tuple of (seller, item_id, price, active)
+    """
+    listing: ItemListing = self.listings[listing_id]
+    return listing.seller, listing.item_id, listing.price, listing.active
